@@ -6,6 +6,7 @@ mod format;
 mod hash;
 mod list;
 mod platform;
+mod update;
 mod verify;
 
 use clap::Parser;
@@ -15,6 +16,7 @@ use cli::Cli;
 use create::cmd_create;
 use extract::cmd_extract;
 use list::cmd_list;
+use update::cmd_update;
 use verify::cmd_verify;
 
 fn main() {
@@ -56,13 +58,16 @@ fn run() -> io::Result<()> {
         cmd_list(&cli)
     } else if cli.verify {
         cmd_verify(&cli)
+    } else if cli.update {
+        cmd_update(&cli)
     } else {
-        eprintln!("ptar: specify -c (create), -x (extract), -t (list), or -k (verify)");
+        eprintln!("ptar: specify -c (create), -x (extract), -t (list), -k (verify), or -u (update)");
         eprintln!();
         eprintln!("  ptar -c -f out.ptar dir/ file.txt ...");
         eprintln!("  ptar -x -f out.ptar");
         eprintln!("  ptar -t -f out.ptar");
         eprintln!("  ptar -k -f out.ptar");
+        eprintln!("  ptar -u -f out.ptar dir/ file.txt ...");
         std::process::exit(1);
     }
 }

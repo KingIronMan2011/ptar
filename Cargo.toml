@@ -13,6 +13,7 @@ jwalk         = "0.8"
 zstd          = "0.13"
 rayon         = "1"
 xxhash-rust   = { version = "0.8",  features = ["xxh3"] }
+indicatif     = "0.17"
 
 [profile.release]
 opt-level      = 3

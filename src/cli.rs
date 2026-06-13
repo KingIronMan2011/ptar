@@ -10,20 +10,24 @@ use clap::Parser;
 )]
 pub struct Cli {
     /// Create archive from paths
-    #[arg(short = 'c', long, conflicts_with_all = ["extract", "list", "verify"])]
+    #[arg(short = 'c', long, conflicts_with_all = ["extract", "list", "verify", "update"])]
     pub create: bool,
 
     /// Extract archive
-    #[arg(short = 'x', long, conflicts_with_all = ["create", "list", "verify"])]
+    #[arg(short = 'x', long, conflicts_with_all = ["create", "list", "verify", "update"])]
     pub extract: bool,
 
     /// List archive contents
-    #[arg(short = 't', long, conflicts_with_all = ["create", "extract", "verify"])]
+    #[arg(short = 't', long, conflicts_with_all = ["create", "extract", "verify", "update"])]
     pub list: bool,
 
     /// Verify archive integrity (checksums only, no extraction)
-    #[arg(short = 'k', long, conflicts_with_all = ["create", "extract", "list"])]
+    #[arg(short = 'k', long, conflicts_with_all = ["create", "extract", "list", "update"])]
     pub verify: bool,
+
+    /// Update archive: add new files, replace changed files, keep unchanged blobs
+    #[arg(short = 'u', long, conflicts_with_all = ["create", "extract", "list", "verify"])]
+    pub update: bool,
 
     /// Archive file path (.ptar)
     #[arg(short = 'f', long)]
