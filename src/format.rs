@@ -1,4 +1,4 @@
-//! Binary format for .ptar archives.
+//! Binary format for .ptar archives (version 2).
 //!
 //! Layout:
 //!   [8]   magic + version
@@ -8,23 +8,31 @@
 
 use std::io::{self, Read, Write};
 
-pub const MAGIC: &[u8; 8] = b"PTAR\x00\x01\x00\x00";
+/// Magic bytes — last two bytes are the format version (currently 0x02).
+pub const MAGIC: &[u8; 8] = b"PTAR\x00\x02\x00\x00";
 
-/// What the fixed cost per entry is before the name and link strings.
-/// 1 (kind) + 4+4+4+8 (mode/uid/gid/mtime) + 8+8+8 (offsets/sizes) = 45
-/// Plus 2-byte length prefix for name and 2-byte length prefix for link = 49 total.
-const ENTRY_FIXED: usize = 49;
+/// Fixed byte cost per entry record, excluding the variable-length name and link strings.
+///
+/// 2  name_len
+/// 1  kind
+/// 4  mode  +  4 uid  +  4 gid  +  8 mtime
+/// 8  data_offset  +  8 data_size  +  8 orig_size
+/// 8  checksum
+/// 2  link_len
+/// = 57
+const ENTRY_FIXED: usize = 57;
 
 pub struct StoredEntry {
     pub name:        String,
-    pub kind:        u8,   // 0 = file, 1 = dir, 2 = symlink
+    pub kind:        u8,      // 0 = file, 1 = dir, 2 = symlink
     pub mode:        u32,
     pub uid:         u32,
     pub gid:         u32,
     pub mtime:       i64,
-    pub data_offset: u64,  // absolute byte offset in the archive file
-    pub data_size:   u64,  // compressed size  (0 for dirs/symlinks)
-    pub orig_size:   u64,  // uncompressed size
+    pub data_offset: u64,     // absolute byte offset in the archive file
+    pub data_size:   u64,     // compressed size  (0 for dirs/symlinks)
+    pub orig_size:   u64,     // uncompressed size
+    pub checksum:    u64,     // xxh3-64 of the compressed blob (0 when data_size == 0)
     pub link:        String,
 }
 
@@ -43,6 +51,7 @@ pub fn write_entry<W: Write>(w: &mut W, e: &StoredEntry) -> io::Result<()> {
     w.write_all(&e.data_offset.to_le_bytes())?;
     w.write_all(&e.data_size.to_le_bytes())?;
     w.write_all(&e.orig_size.to_le_bytes())?;
+    w.write_all(&e.checksum.to_le_bytes())?;
     write_str(w, &e.link)
 }
 
@@ -79,6 +88,7 @@ fn read_entry<R: Read>(r: &mut R) -> io::Result<StoredEntry> {
         data_offset: read_u64(r)?,
         data_size:   read_u64(r)?,
         orig_size:   read_u64(r)?,
+        checksum:    read_u64(r)?,
         link:        read_str(r)?,
     })
 }

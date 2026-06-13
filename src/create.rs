@@ -5,6 +5,7 @@ use std::{
 };
 
 use rayon::prelude::*;
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
     cli::Cli,
@@ -43,7 +44,8 @@ pub fn cmd_create(cli: &Cli) -> io::Result<()> {
         .map(|(i, _)| i)
         .collect();
 
-    let mut data_sizes = vec![0u64; entries.len()]; // compressed size per entry index
+    let mut data_sizes     = vec![0u64; entries.len()]; // compressed size per entry index
+    let mut data_checksums = vec![0u64; entries.len()]; // xxh3 of compressed blob
     let level = cli.level;
     let t1 = Instant::now();
     let mut n_compressed = 0usize;
@@ -55,7 +57,8 @@ pub fn cmd_create(cli: &Cli) -> io::Result<()> {
         let blobs = blobs?;
 
         for (&entry_idx, blob) in chunk.iter().zip(blobs.iter()) {
-            data_sizes[entry_idx] = blob.len() as u64;
+            data_sizes[entry_idx]     = blob.len() as u64;
+            data_checksums[entry_idx] = xxh3_64(blob);
             if cli.verbose { eprintln!("  {}", entries[entry_idx].display); }
             bw.write_all(blob)?;
             n_compressed += 1;
@@ -85,6 +88,7 @@ pub fn cmd_create(cli: &Cli) -> io::Result<()> {
             data_offset: offset,
             data_size,
             orig_size:   e.size,
+            checksum:    data_checksums[i],
             link:        link_of(e),
         };
         offset += data_size;

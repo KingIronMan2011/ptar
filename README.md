@@ -134,4 +134,4 @@ Because each file is its own zstd blob with a known byte offset, extraction can 
 ## Requirements
 
 - Rust 1.65 or later
-- Linux, macOS, or other Unix-like OS (symlink support is Unix-only; the binary compiles on Windows but symlinks are silently skipped)
+- Linux, macOS, Windows, or other platforms (symlinks on Windows require **Developer Mode** or administrator privileges — without one of those, symlink entries in an archive will fail to extract with a permission error; all other entry types work normally)

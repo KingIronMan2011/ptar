@@ -3,9 +3,9 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(
     name    = "ptar",
-    version = "0.1.0",
+    version, // reads from Cargo.toml automatically
     about   = "Parallel tar — rayon reads + zstd multi-core compression",
-    long_about = "Creates .tar.zst archives using all available CPU cores.\n\
+    long_about = "Creates .ptar archives using all available CPU cores.\n\
                   Parallelises both I/O (rayon) and compression (zstd workers)."
 )]
 pub struct Cli {
@@ -21,7 +21,7 @@ pub struct Cli {
     #[arg(short = 't', long, conflicts_with_all = ["create", "extract"])]
     pub list: bool,
 
-    /// Archive file path (.tar.zst)
+    /// Archive file path (.ptar)
     #[arg(short = 'f', long)]
     pub file: String,
 

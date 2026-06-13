@@ -6,6 +6,7 @@ use std::{
 };
 
 use rayon::iter::{ParallelBridge, ParallelIterator};
+use xxhash_rust::xxh3::xxh3_64;
 
 use crate::{
     cli::Cli,
@@ -14,6 +15,13 @@ use crate::{
 };
 
 const IN_BUF: usize = 4 * 1024 * 1024;
+
+// Payload sent through the reader→workers channel.
+struct Blob {
+    name:     String,
+    data:     Vec<u8>,
+    checksum: u64, // expected xxh3 of `data`
+}
 
 pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
     let f  = File::open(&cli.file)?;
@@ -42,18 +50,18 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
     }
 
     // Pass 2 (pipelined): one reader thread feeds a bounded channel; rayon workers
-    // decompress and write files in parallel as blobs arrive — I/O and CPU overlap.
+    // verify, decompress, and write files in parallel as blobs arrive.
     let n_workers = rayon::current_num_threads();
     let verbose   = cli.verbose;
 
-    let (tx, rx) = mpsc::sync_channel::<io::Result<(String, Vec<u8>)>>(n_workers * 2);
+    let (tx, rx) = mpsc::sync_channel::<io::Result<Blob>>(n_workers * 2);
 
     let reader = std::thread::spawn(move || {
         for e in files {
             let result = read_blob(&mut br, e);
             let failed = result.is_err();
             if tx.send(result).is_err() || failed {
-                break; // workers dropped rx (their error) or we hit a read error
+                break;
             }
         }
     });
@@ -61,15 +69,15 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
     let extract_result = rx
         .into_iter()
         .par_bridge()
-        .try_for_each(|item: io::Result<(String, Vec<u8>)>| -> io::Result<()> {
-            let (name, blob) = item?;
-            let dest = platform::safe_dest(&name);
+        .try_for_each(|item: io::Result<Blob>| -> io::Result<()> {
+            let blob = item?;
+            let dest_str = blob.name.clone();
+            let dest = platform::safe_dest(&dest_str);
             if let Some(p) = dest.parent() { fs::create_dir_all(p)?; }
-            if verbose { eprintln!("  {name}"); }
-            write_file(dest, &blob)
+            if verbose { eprintln!("  {}", blob.name); }
+            write_file(dest, blob)
         });
 
-    // Always join — if workers errored early they dropped rx, which unblocks the reader.
     reader.join().expect("reader thread panicked");
     extract_result?;
 
@@ -84,23 +92,35 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
     Ok(())
 }
 
-fn read_blob(r: &mut impl Read, e: StoredEntry) -> io::Result<(String, Vec<u8>)> {
+fn read_blob(r: &mut impl Read, e: StoredEntry) -> io::Result<Blob> {
     if e.data_size == 0 {
-        return Ok((e.name, Vec::new()));
+        return Ok(Blob { name: e.name, data: Vec::new(), checksum: 0 });
     }
-    let mut buf = vec![0u8; e.data_size as usize];
-    r.read_exact(&mut buf)?;
-    Ok((e.name, buf))
+    let mut data = vec![0u8; e.data_size as usize];
+    r.read_exact(&mut data)?;
+    Ok(Blob { name: e.name, data, checksum: e.checksum })
 }
 
-fn write_file(dest: &Path, blob: &[u8]) -> io::Result<()> {
-    if blob.is_empty() {
+fn write_file(dest: &Path, blob: Blob) -> io::Result<()> {
+    if blob.data.is_empty() {
         return File::create(dest).map(|_| ());
     }
-    // Stream decompression directly to disk — no fully-decompressed Vec ever lives in RAM.
-    let mut dec = zstd::Decoder::new(Cursor::new(blob))?;
+
+    // Verify integrity before touching the filesystem.
+    let actual = xxh3_64(&blob.data);
+    if actual != blob.checksum {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "checksum mismatch for '{}': expected {:#018x}, got {:#018x}",
+                blob.name, blob.checksum, actual
+            ),
+        ));
+    }
+
+    // Stream decompression directly to disk — no fully-decompressed Vec in RAM.
+    let mut dec = zstd::Decoder::new(Cursor::new(&blob.data))?;
     let mut out = BufWriter::with_capacity(256 * 1024, File::create(dest)?);
     io::copy(&mut dec, &mut out)?;
     out.flush()
 }
-

@@ -8,10 +8,11 @@ name = "ptar"
 path = "src/main.rs"
 
 [dependencies]
-clap    = { version = "4",    features = ["derive"] }
-jwalk   = "0.8"
-zstd    = { version = "0.13", features = ["zstdmt"] }
-rayon   = "1"
+clap          = { version = "4",    features = ["derive"] }
+jwalk         = "0.8"
+zstd          = "0.13"
+rayon         = "1"
+xxhash-rust   = { version = "0.8",  features = ["xxh3"] }
 
 [profile.release]
 opt-level      = 3
