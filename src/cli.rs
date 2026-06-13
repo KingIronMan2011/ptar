@@ -3,23 +3,27 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(
     name    = "ptar",
-    version, // reads from Cargo.toml automatically
+    version,
     about   = "Parallel tar — rayon reads + zstd multi-core compression",
     long_about = "Creates .ptar archives using all available CPU cores.\n\
                   Parallelises both I/O (rayon) and compression (zstd workers)."
 )]
 pub struct Cli {
     /// Create archive from paths
-    #[arg(short = 'c', long, conflicts_with_all = ["extract", "list"])]
+    #[arg(short = 'c', long, conflicts_with_all = ["extract", "list", "verify"])]
     pub create: bool,
 
     /// Extract archive
-    #[arg(short = 'x', long, conflicts_with_all = ["create", "list"])]
+    #[arg(short = 'x', long, conflicts_with_all = ["create", "list", "verify"])]
     pub extract: bool,
 
     /// List archive contents
-    #[arg(short = 't', long, conflicts_with_all = ["create", "extract"])]
+    #[arg(short = 't', long, conflicts_with_all = ["create", "extract", "verify"])]
     pub list: bool,
+
+    /// Verify archive integrity (checksums only, no extraction)
+    #[arg(short = 'k', long, conflicts_with_all = ["create", "extract", "list"])]
+    pub verify: bool,
 
     /// Archive file path (.ptar)
     #[arg(short = 'f', long)]
@@ -36,6 +40,10 @@ pub struct Cli {
     /// Zstd compression level 1–19
     #[arg(short = 'l', long = "level", default_value = "3")]
     pub level: i32,
+
+    /// Write a checksums manifest to <file> (create mode only)
+    #[arg(short = 'C', long = "checksums")]
+    pub checksums: Option<String>,
 
     /// Paths to archive (create mode)
     pub paths: Vec<String>,

@@ -11,16 +11,17 @@ use xxhash_rust::xxh3::xxh3_64;
 use crate::{
     cli::Cli,
     format::{read_entries, read_u64, verify_magic, StoredEntry},
+    hash::HashingWriter,
     platform,
 };
 
 const IN_BUF: usize = 4 * 1024 * 1024;
 
-// Payload sent through the reader→workers channel.
 struct Blob {
-    name:     String,
-    data:     Vec<u8>,
-    checksum: u64, // expected xxh3 of `data`
+    name:          String,
+    data:          Vec<u8>,
+    checksum:      u64, // expected xxh3 of compressed data
+    orig_checksum: u64, // expected xxh3 of uncompressed content
 }
 
 pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
@@ -94,11 +95,11 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
 
 fn read_blob(r: &mut impl Read, e: StoredEntry) -> io::Result<Blob> {
     if e.data_size == 0 {
-        return Ok(Blob { name: e.name, data: Vec::new(), checksum: 0 });
+        return Ok(Blob { name: e.name, data: Vec::new(), checksum: 0, orig_checksum: 0 });
     }
     let mut data = vec![0u8; e.data_size as usize];
     r.read_exact(&mut data)?;
-    Ok(Blob { name: e.name, data, checksum: e.checksum })
+    Ok(Blob { name: e.name, data, checksum: e.checksum, orig_checksum: e.orig_checksum })
 }
 
 fn write_file(dest: &Path, blob: Blob) -> io::Result<()> {
@@ -118,9 +119,22 @@ fn write_file(dest: &Path, blob: Blob) -> io::Result<()> {
         ));
     }
 
-    // Stream decompression directly to disk — no fully-decompressed Vec in RAM.
+    // Stream decompression directly to disk, hashing the decompressed bytes on the fly.
     let mut dec = zstd::Decoder::new(Cursor::new(&blob.data))?;
-    let mut out = BufWriter::with_capacity(256 * 1024, File::create(dest)?);
-    io::copy(&mut dec, &mut out)?;
-    out.flush()
+    let raw_out = BufWriter::with_capacity(256 * 1024, File::create(dest)?);
+    let mut hw  = HashingWriter::new(raw_out);
+    io::copy(&mut dec, &mut hw)?;
+    hw.inner.flush()?;
+    let actual_orig = hw.finish();
+
+    if blob.orig_checksum != 0 && actual_orig != blob.orig_checksum {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "content checksum mismatch for '{}': expected {:#018x}, got {:#018x}",
+                blob.name, blob.orig_checksum, actual_orig
+            ),
+        ));
+    }
+    Ok(())
 }

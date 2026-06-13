@@ -3,8 +3,10 @@ mod create;
 mod entry;
 mod extract;
 mod format;
+mod hash;
 mod list;
 mod platform;
+mod verify;
 
 use clap::Parser;
 use std::io;
@@ -13,6 +15,7 @@ use cli::Cli;
 use create::cmd_create;
 use extract::cmd_extract;
 use list::cmd_list;
+use verify::cmd_verify;
 
 fn main() {
     if let Err(e) = run() {
@@ -51,12 +54,15 @@ fn run() -> io::Result<()> {
         cmd_extract(&cli)
     } else if cli.list {
         cmd_list(&cli)
+    } else if cli.verify {
+        cmd_verify(&cli)
     } else {
-        eprintln!("ptar: specify -c (create), -x (extract), or -t (list)");
+        eprintln!("ptar: specify -c (create), -x (extract), -t (list), or -k (verify)");
         eprintln!();
         eprintln!("  ptar -c -f out.ptar dir/ file.txt ...");
         eprintln!("  ptar -x -f out.ptar");
         eprintln!("  ptar -t -f out.ptar");
+        eprintln!("  ptar -k -f out.ptar");
         std::process::exit(1);
     }
 }

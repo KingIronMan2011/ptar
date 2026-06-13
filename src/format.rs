@@ -1,4 +1,4 @@
-//! Binary format for .ptar archives (version 2).
+//! Binary format for .ptar archives (version 3).
 //!
 //! Layout:
 //!   [8]   magic + version
@@ -8,8 +8,8 @@
 
 use std::io::{self, Read, Write};
 
-/// Magic bytes — last two bytes are the format version (currently 0x02).
-pub const MAGIC: &[u8; 8] = b"PTAR\x00\x02\x00\x00";
+/// Magic bytes — last two bytes are the format version (currently 0x03).
+pub const MAGIC: &[u8; 8] = b"PTAR\x00\x03\x00\x00";
 
 /// Fixed byte cost per entry record, excluding the variable-length name and link strings.
 ///
@@ -17,10 +17,11 @@ pub const MAGIC: &[u8; 8] = b"PTAR\x00\x02\x00\x00";
 /// 1  kind
 /// 4  mode  +  4 uid  +  4 gid  +  8 mtime
 /// 8  data_offset  +  8 data_size  +  8 orig_size
-/// 8  checksum
+/// 8  checksum      (xxh3-64 of compressed blob)
+/// 8  orig_checksum (xxh3-64 of uncompressed content)
 /// 2  link_len
-/// = 57
-const ENTRY_FIXED: usize = 57;
+/// = 65
+const ENTRY_FIXED: usize = 65;
 
 pub struct StoredEntry {
     pub name:        String,
@@ -32,8 +33,9 @@ pub struct StoredEntry {
     pub data_offset: u64,     // absolute byte offset in the archive file
     pub data_size:   u64,     // compressed size  (0 for dirs/symlinks)
     pub orig_size:   u64,     // uncompressed size
-    pub checksum:    u64,     // xxh3-64 of the compressed blob (0 when data_size == 0)
-    pub link:        String,
+    pub checksum:      u64,   // xxh3-64 of the compressed blob      (0 when data_size == 0)
+    pub orig_checksum: u64,   // xxh3-64 of the uncompressed content (0 when data_size == 0)
+    pub link:          String,
 }
 
 /// Serialised byte length of one entry record.
@@ -52,6 +54,7 @@ pub fn write_entry<W: Write>(w: &mut W, e: &StoredEntry) -> io::Result<()> {
     w.write_all(&e.data_size.to_le_bytes())?;
     w.write_all(&e.orig_size.to_le_bytes())?;
     w.write_all(&e.checksum.to_le_bytes())?;
+    w.write_all(&e.orig_checksum.to_le_bytes())?;
     write_str(w, &e.link)
 }
 
@@ -88,8 +91,9 @@ fn read_entry<R: Read>(r: &mut R) -> io::Result<StoredEntry> {
         data_offset: read_u64(r)?,
         data_size:   read_u64(r)?,
         orig_size:   read_u64(r)?,
-        checksum:    read_u64(r)?,
-        link:        read_str(r)?,
+        checksum:      read_u64(r)?,
+        orig_checksum: read_u64(r)?,
+        link:          read_str(r)?,
     })
 }
 
