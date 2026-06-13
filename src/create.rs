@@ -31,7 +31,7 @@ pub fn cmd_create(cli: &Cli) -> io::Result<()> {
     // Open output and jump straight to the data section.
     // The header region (bytes 0..header_size) stays as a sparse hole until we fill it at
     // the end — this avoids writing any placeholder bytes.
-    let out = File::create(&cli.file)?;
+    let mut out = File::create(&cli.file)?;
     out.seek(SeekFrom::Start(header_size))?;
     let mut bw = BufWriter::with_capacity(OUT_BUF, out);
 

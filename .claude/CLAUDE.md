@@ -34,17 +34,18 @@ cargo fmt
 
 The codebase is split into six modules under `src/`:
 
-| Module | Contents |
-|--------|----------|
-| `main.rs` | CLI dispatch (`run()`), thread-count resolution, `main()` |
-| `cli.rs` | `Cli` struct (clap derive) — all flags and arguments |
-| `entry.rs` | `Entry` struct + `collect_entries()` — `walkdir` traversal |
-| `header.rs` | ustar format: `make_header()`, `read_header()`, `HeaderRecord` enum, `padding()`, `skip()`, shared `IO_BUF`/`CHUNK` constants |
-| `create.rs` | `cmd_create()` — parallel read phase + sequential zstd encode |
-| `extract.rs` | `cmd_extract()` — zstd decode + file/dir/symlink restoration |
-| `list.rs` | `cmd_list()` — zstd decode + entry printing |
+| Module       | Contents                                                                                                                      |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `main.rs`    | CLI dispatch (`run()`), thread-count resolution, `main()`                                                                     |
+| `cli.rs`     | `Cli` struct (clap derive) — all flags and arguments                                                                          |
+| `entry.rs`   | `Entry` struct + `collect_entries()` — `walkdir` traversal                                                                    |
+| `header.rs`  | ustar format: `make_header()`, `read_header()`, `HeaderRecord` enum, `padding()`, `skip()`, shared `IO_BUF`/`CHUNK` constants |
+| `create.rs`  | `cmd_create()` — parallel read phase + sequential zstd encode                                                                 |
+| `extract.rs` | `cmd_extract()` — zstd decode + file/dir/symlink restoration                                                                  |
+| `list.rs`    | `cmd_list()` — zstd decode + entry printing                                                                                   |
 
 **Parallelism model:**
+
 - `rayon` pre-reads all files ≤ 64 MiB in parallel into memory blobs (`create.rs`).
 - The tar stream is written sequentially (ustar requires ordered blocks).
 - `zstd::Encoder::multithread(n)` compresses in parallel on the write side.
