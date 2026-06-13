@@ -35,6 +35,10 @@ The codebase is split into six modules under `src/`:
 | `create.rs` | `cmd_create()` — chunked parallel compression + two-phase header write |
 | `extract.rs` | `cmd_extract()` — reader→channel→rayon pipeline, streaming decompress |
 | `list.rs` | `cmd_list()` — read entry table, print |
+| `platform/mod.rs` | Cross-platform API: `normalize_path()`, `safe_dest()`, re-exports OS impl |
+| `platform/unix.rs` | Unix: `file_mtime/mode/uid/gid`, `create_symlink` via `std::os::unix` |
+| `platform/windows.rs` | Windows: FILETIME→Unix mtime conversion, `symlink_file`/`symlink_dir` |
+| `platform/other.rs` | Fallback stubs for other targets |
 
 ## Archive format (.ptar)
 
@@ -65,7 +69,7 @@ Each entry record uses length-prefixed strings (u16 LE) for name and link target
 4. `par_bridge()` distributes blobs from the channel to rayon workers, which stream-decompress directly to disk via `zstd::Decoder` + `io::copy` — no fully-decompressed `Vec` ever lives in RAM
 5. Symlinks created last (sequential)
 
-**Platform note:** Unix metadata (`uid`, `gid`, `mtime`, `mode`) and symlink creation are gated with `#[cfg(unix)]` in `entry.rs` and `extract.rs`. The binary compiles on Windows but symlinks are silently skipped.
+**Platform note:** All OS-specific code lives in `src/platform/`. `entry.rs` and `extract.rs` call `platform::*` functions with no inline `#[cfg]` blocks. The correct implementation is selected at compile time via `#[cfg(unix)]` / `#[cfg(windows)]` in `platform/mod.rs`.
 
 ## Known Limitations
 

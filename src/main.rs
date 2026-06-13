@@ -4,6 +4,7 @@ mod entry;
 mod extract;
 mod format;
 mod list;
+mod platform;
 
 use clap::Parser;
 use std::io;

@@ -2,6 +2,8 @@ use std::{fs, path::PathBuf};
 
 use jwalk::WalkDir;
 
+use crate::platform;
+
 pub struct Entry {
     pub path:        PathBuf,
     pub display:     String,
@@ -33,31 +35,28 @@ pub fn collect_entries(paths: &[String]) -> Vec<Entry> {
 
             let path_buf = de.path();
             let raw      = path_buf.to_string_lossy();
-            let display  = raw
-                .trim_start_matches("./")
-                .trim_start_matches('/')
-                .to_owned();
 
-            #[cfg(unix)]
-            let (mode, uid, gid, mtime) = {
-                use std::os::unix::fs::{MetadataExt, PermissionsExt};
-                (meta.permissions().mode(), meta.uid(), meta.gid(), meta.mtime())
-            };
-            #[cfg(not(unix))]
-            let (mode, uid, gid, mtime) = (0o644u32, 0u32, 0u32, 0i64);
+            // Normalise separators to '/' and strip leading './' or '/' so archive
+            // paths are relative and portable on both Windows and Unix.
+            let display = platform::normalize_path(
+                raw.trim_start_matches("./")
+                   .trim_start_matches('/')
+                   .trim_start_matches(".\\")
+                   .trim_start_matches('\\'),
+            );
 
             entries.push(Entry {
-                path: de.path().to_path_buf(),
+                path: path_buf.to_path_buf(),
                 display,
                 size:      if meta.is_file() { meta.len() } else { 0 },
                 is_file:   meta.is_file(),
                 is_dir:    meta.is_dir(),
                 is_symlink,
                 link_target,
-                mode,
-                uid,
-                gid,
-                mtime,
+                mode:  platform::file_mode(&meta),
+                uid:   platform::file_uid(&meta),
+                gid:   platform::file_gid(&meta),
+                mtime: platform::file_mtime(&meta),
             });
         }
     }

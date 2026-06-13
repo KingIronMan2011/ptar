@@ -10,6 +10,7 @@ use rayon::iter::{ParallelBridge, ParallelIterator};
 use crate::{
     cli::Cli,
     format::{read_entries, read_u64, verify_magic, StoredEntry},
+    platform,
 };
 
 const IN_BUF: usize = 4 * 1024 * 1024;
@@ -36,7 +37,7 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
 
     // Pass 1 (sequential): create all directories before any file writer touches them.
     for e in &dirs {
-        fs::create_dir_all(safe_path(&e.name))?;
+        fs::create_dir_all(platform::safe_dest(&e.name))?;
         if cli.verbose { eprintln!("  {}/", e.name); }
     }
 
@@ -62,7 +63,7 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
         .par_bridge()
         .try_for_each(|item: io::Result<(String, Vec<u8>)>| -> io::Result<()> {
             let (name, blob) = item?;
-            let dest = safe_path(&name);
+            let dest = platform::safe_dest(&name);
             if let Some(p) = dest.parent() { fs::create_dir_all(p)?; }
             if verbose { eprintln!("  {name}"); }
             write_file(dest, &blob)
@@ -74,9 +75,9 @@ pub fn cmd_extract(cli: &Cli) -> io::Result<()> {
 
     // Pass 3 (sequential): symlinks — usually few, must come after files are written.
     for e in &links {
-        let dest = safe_path(&e.name);
+        let dest = platform::safe_dest(&e.name);
         if let Some(p) = dest.parent() { fs::create_dir_all(p)?; }
-        create_symlink(dest, &e.link)?;
+        platform::create_symlink(dest, &e.link)?;
         if cli.verbose { eprintln!("  {} -> {}", e.name, e.link); }
     }
 
@@ -103,17 +104,3 @@ fn write_file(dest: &Path, blob: &[u8]) -> io::Result<()> {
     out.flush()
 }
 
-fn safe_path(name: &str) -> &Path {
-    Path::new(name.trim_start_matches('/'))
-}
-
-fn create_symlink(dest: &Path, target: &str) -> io::Result<()> {
-    #[cfg(unix)] {
-        use std::os::unix::fs::symlink;
-        let _ = fs::remove_file(dest);
-        symlink(target, dest)?;
-    }
-    #[cfg(not(unix))]
-    let _ = (dest, target);
-    Ok(())
-}
