@@ -17,6 +17,7 @@ use winreg::{
 };
 
 const ENV_KEY: &str = r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment";
+const CLASSES: &str = r"SOFTWARE\Classes";
 const ELEVATED_FLAG: &str = "--elevated";
 
 /// Handle installer arguments. Returns `None` if the args are a normal CLI invocation.
@@ -82,19 +83,21 @@ fn install_impl(elevated: bool) -> io::Result<()> {
     }
 
     let added = add_to_path(&dir)?;
+    register_shell(&dest)?;
     println!("Installed {}", dest.display());
     if added {
         println!("Added {} to the system PATH.", dir.display());
     } else {
         println!("{} is already on the system PATH.", dir.display());
     }
+    println!("Added Explorer context-menu entries (Extract here / Extract to folder / Add to .ptar archive).");
     println!("Open a new terminal to use `ptar`.");
     Ok(())
 }
 
 fn uninstall_impl(elevated: bool) -> io::Result<()> {
     let dir = install_dir()?;
-    match remove_from_path(&dir) {
+    match remove_from_path(&dir).and_then(|_| unregister_shell()) {
         Err(e) if e.kind() == io::ErrorKind::PermissionDenied && !elevated => {
             return relaunch_elevated("--uninstall");
         }
@@ -218,4 +221,58 @@ fn broadcast_env_change() {
             std::ptr::null_mut(),
         );
     }
+}
+
+/// (key under HKLM\SOFTWARE\Classes, menu text, shell flag)
+fn verbs() -> [(&'static str, &'static str, &'static str); 4] {
+    use crate::shell::{CREATE, EXTRACT_HERE, EXTRACT_TO};
+    [
+        (r"ptar.archive\shell\ptar_extract_here", "Extract here (ptar)", EXTRACT_HERE),
+        (r"ptar.archive\shell\ptar_extract_to", "Extract to folder (ptar)", EXTRACT_TO),
+        (r"*\shell\ptar_add", "Add to .ptar archive", CREATE),
+        (r"Directory\shell\ptar_add", "Add to .ptar archive", CREATE),
+    ]
+}
+
+fn set_default(root: &RegKey, path: &str, value: &str) -> io::Result<RegKey> {
+    let (key, _) = root.create_subkey_with_flags(path, KEY_WRITE)?;
+    key.set_value("", &value)?;
+    Ok(key)
+}
+
+/// Register the `.ptar` file type and the Explorer context-menu verbs.
+/// (On Windows 11 they appear under "Show more options".)
+fn register_shell(exe: &Path) -> io::Result<()> {
+    let exe = exe.display().to_string();
+    let classes = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey_with_flags(CLASSES, KEY_WRITE)?;
+
+    set_default(&classes, ".ptar", "ptar.archive")?;
+    set_default(&classes, "ptar.archive", "ptar archive")?;
+    set_default(&classes, r"ptar.archive\DefaultIcon", &format!("\"{exe}\",0"))?;
+
+    for (path, text, flag) in verbs() {
+        let key = set_default(&classes, path, text)?;
+        key.set_value("Icon", &format!("\"{exe}\",0"))?;
+        set_default(&classes, &format!(r"{path}\command"), &format!("\"{exe}\" {flag} \"%1\""))?;
+    }
+    notify_assoc_changed();
+    Ok(())
+}
+
+fn unregister_shell() -> io::Result<()> {
+    let classes = RegKey::predef(HKEY_LOCAL_MACHINE).open_subkey_with_flags(CLASSES, KEY_WRITE)?;
+    let paths = [".ptar", "ptar.archive", r"*\shell\ptar_add", r"Directory\shell\ptar_add"];
+    for p in paths {
+        match classes.delete_subkey_all(p) {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+            other => other?,
+        }
+    }
+    notify_assoc_changed();
+    Ok(())
+}
+
+fn notify_assoc_changed() {
+    use windows_sys::Win32::UI::Shell::{SHCNE_ASSOCCHANGED, SHCNF_IDLIST, SHChangeNotify};
+    unsafe { SHChangeNotify(SHCNE_ASSOCCHANGED as i32, SHCNF_IDLIST, std::ptr::null(), std::ptr::null()) };
 }

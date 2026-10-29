@@ -136,7 +136,11 @@ Because each file is its own zstd blob with a known byte offset, extraction can 
 - Rust 1.65 or later
 - Linux, macOS, Windows, or other platforms (symlinks on Windows require **Developer Mode** or administrator privileges — without one of those, symlink entries in an archive will fail to extract with a permission error; all other entry types work normally)
 
-### Windows: self-install
+### Windows: self-install and Explorer integration
 
-Run the release binary once (double-click, or `ptar.exe --install`). It copies itself to `Program Files\ptar` and adds that folder to the system `PATH` (UAC prompt if not elevated). `ptar --uninstall` removes the PATH entry and the folder.
+Run the release binary once (double-click, or `ptar.exe --install`). It copies itself to `Program Files\ptar`, adds that folder to the system `PATH` (UAC prompt if not elevated) and registers the `.ptar` file type with Explorer context-menu entries:
 
+- on `.ptar` files: **Extract here (ptar)** and **Extract to folder (ptar)**
+- on any file or folder: **Add to .ptar archive** (creates `<name>.ptar` next to it)
+
+On Windows 11 these are under *Show more options*. `ptar --uninstall` removes the PATH entry, the context-menu entries and the folder.

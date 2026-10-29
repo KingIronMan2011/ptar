@@ -8,6 +8,8 @@ mod hash;
 mod install;
 mod list;
 mod platform;
+#[cfg(windows)]
+mod shell;
 mod update;
 mod verify;
 
@@ -25,6 +27,12 @@ fn main() {
     if let Err(e) = run() {
         if e.kind() != io::ErrorKind::BrokenPipe {
             eprintln!("ptar: error: {e}");
+            #[cfg(windows)]
+            if shell::is_shell(&std::env::args().collect::<Vec<_>>()) {
+                // Launched from Explorer: keep the console open so the error is readable.
+                eprintln!("Press Enter to close...");
+                let _ = io::stdin().read_line(&mut String::new());
+            }
             std::process::exit(1);
         }
     }
@@ -40,6 +48,17 @@ fn run() -> io::Result<()> {
         }
     }
 
+    // Explorer context-menu verbs are rewritten into regular command lines.
+    #[cfg(windows)]
+    let cli = {
+        let args: Vec<String> = std::env::args().collect();
+        if shell::is_shell(&args) {
+            Cli::parse_from(shell::translate(&args)?)
+        } else {
+            Cli::parse()
+        }
+    };
+    #[cfg(not(windows))]
     let cli = Cli::parse();
 
     let threads = if cli.threads == 0 {
