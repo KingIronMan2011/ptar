@@ -4,6 +4,8 @@ mod entry;
 mod extract;
 mod format;
 mod hash;
+#[cfg(windows)]
+mod install;
 mod list;
 mod platform;
 mod update;
@@ -29,6 +31,15 @@ fn main() {
 }
 
 fn run() -> io::Result<()> {
+    // Windows: running with no args (or --install/--uninstall) installs/removes ptar.
+    #[cfg(windows)]
+    {
+        let args: Vec<String> = std::env::args().collect();
+        if let Some(result) = install::try_run(&args) {
+            return result;
+        }
+    }
+
     let cli = Cli::parse();
 
     let threads = if cli.threads == 0 {

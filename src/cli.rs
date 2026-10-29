@@ -5,6 +5,12 @@ use clap::Parser;
     name    = "ptar",
     version,
     about   = "Parallel tar — rayon reads + zstd multi-core compression",
+    after_help = if cfg!(windows) {
+        "Windows: run `ptar --install` (or just double-click ptar.exe) to copy it to \
+         Program Files and add it to PATH; `ptar --uninstall` reverses this."
+    } else {
+        ""
+    },
     long_about = "Creates .ptar archives using all available CPU cores.\n\
                   Parallelises both I/O (rayon) and compression (zstd workers)."
 )]

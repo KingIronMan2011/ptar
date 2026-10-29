@@ -135,3 +135,8 @@ Because each file is its own zstd blob with a known byte offset, extraction can 
 
 - Rust 1.65 or later
 - Linux, macOS, Windows, or other platforms (symlinks on Windows require **Developer Mode** or administrator privileges — without one of those, symlink entries in an archive will fail to extract with a permission error; all other entry types work normally)
+
+### Windows: self-install
+
+Run the release binary once (double-click, or `ptar.exe --install`). It copies itself to `Program Files\ptar` and adds that folder to the system `PATH` (UAC prompt if not elevated). `ptar --uninstall` removes the PATH entry and the folder.
+
